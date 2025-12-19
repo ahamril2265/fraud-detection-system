@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./storage/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  producer:
+    build: ./services/producer
+    depends_on:
+      - kafka
+    env_file:
+      - .env
+
+  etl:
+    build: ./services/etl
+    depends_on:
+      - kafka
+      - postgres
+    env_file:
+      - .env
+
+  ml_inference:
+    build: ./services/ml_inference
+    volumes:
+      - ./services/ml_inference/models:/app/models
+    depends_on:
+      - kafka
+      - postgres
+    env_file:
+      - .env
+
+  dashboard:
+    build: ./services/dashboard
+    ports:
+      - "8501:8501"
+    depends_on:
+      - postgres
+    env_file:
+      - .env
